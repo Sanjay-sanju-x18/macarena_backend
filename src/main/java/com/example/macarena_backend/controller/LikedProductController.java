@@ -67,15 +67,17 @@ public class LikedProductController {
     }
 
     // ============================================================
-    // Helper — get current user ID from Authentication
-    // Adjust this to match YOUR auth setup!
+    // Same pattern as CartController — read customer id from
+    // auth.getDetails(), where JwtAuthFilter stashes it.
     // ============================================================
     private Long currentUserId(Authentication auth) {
-        // If your JWT filter sets a custom principal object with getId():
-        //   UserPrincipal p = (UserPrincipal) auth.getPrincipal();
-        //   return p.getId();
-
-        // If your JWT subject (auth.getName()) is the user ID as a string:
-        return Long.parseLong(auth.getName());
+        if (auth == null) {
+            throw new IllegalArgumentException("Not authenticated");
+        }
+        Object details = auth.getDetails();
+        if (details instanceof Long) {
+            return (Long) details;
+        }
+        throw new IllegalArgumentException("Customer id missing from token");
     }
 }

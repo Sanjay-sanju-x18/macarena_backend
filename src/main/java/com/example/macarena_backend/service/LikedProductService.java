@@ -2,7 +2,9 @@ package com.example.macarena_backend.service;
 
 import com.example.macarena_backend.dto.LikedProductResponse;
 import com.example.macarena_backend.entity.LikedProduct;
+import com.example.macarena_backend.entity.Product;
 import com.example.macarena_backend.repository.LikedProductRepository;
+import com.example.macarena_backend.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,12 +15,15 @@ import java.util.stream.Collectors;
 public class LikedProductService {
 
     private final LikedProductRepository repo;
+    private final ProductRepository productRepo;
 
-    public LikedProductService(LikedProductRepository repo) {
+    public LikedProductService(LikedProductRepository repo,
+                               ProductRepository productRepo) {
         this.repo = repo;
+        this.productRepo = productRepo;
     }
 
-    /** Just the IDs — this is what the heart button uses. */
+    /** Just IDs — used by the heart's isLiked() check. */
     public List<Long> getLikedProductIds(Long userId) {
         return repo.findByUserIdOrderByCreatedAtDesc(userId)
                    .stream()
@@ -26,16 +31,34 @@ public class LikedProductService {
                    .collect(Collectors.toList());
     }
 
-    /**
-     * Enriched list for /liked-products page.
-     * TODO: inject your ProductRepository here and populate name/image/price.
-     * For now returns IDs only (frontend will handle placeholder).
-     */
+    /** Enriched list — used by /liked-products page. */
     public List<LikedProductResponse> getLikedProducts(Long userId) {
         return repo.findByUserIdOrderByCreatedAtDesc(userId)
-                   .stream()
-                   .map(lp -> new LikedProductResponse(lp.getProductId(), null, null, null))
-                   .collect(Collectors.toList());
+            .stream()
+            .map(lp -> {
+                Product p = productRepo.findById(lp.getProductId()).orElse(null);
+                if (p == null) {
+                    return new LikedProductResponse(lp.getProductId(), null, null, null);
+                }
+
+                // First photo from Product.photos (List<String>)
+                String imagePath = (p.getPhotos() != null && !p.getPhotos().isEmpty())
+                        ? p.getPhotos().get(0)
+                        : null;
+
+                // Prefer offer price, else regular price
+                Double price = (p.getOfferPrice() != null && p.getOfferPrice() > 0)
+                        ? p.getOfferPrice()
+                        : p.getPrice();
+
+                return new LikedProductResponse(
+                        p.getId(),
+                        p.getDressName(),
+                        imagePath,
+                        price
+                );
+            })
+            .collect(Collectors.toList());
     }
 
     public boolean isLiked(Long userId, Long productId) {
