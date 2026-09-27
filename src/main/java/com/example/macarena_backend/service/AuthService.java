@@ -32,11 +32,11 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest req) {
 
-        String email = req.getEmail().trim().toLowerCase();
+        String identifier = req.getEmail().trim().toLowerCase();
         String rawPassword = req.getPassword();
 
         // 1️⃣ Try CUSTOMER first (by email)
-        Optional<Customer> customer = customerRepo.findByEmailIgnoreCase(email);
+        Optional<Customer> customer = customerRepo.findByEmailIgnoreCase(identifier);
         if (customer.isPresent()) {
             Customer c = customer.get();
 
@@ -55,8 +55,12 @@ public class AuthService {
             );
         }
 
-        // 2️⃣ Try ADMIN (matched by name — admins don't have email)
-        Optional<AdminUser> admin = adminRepo.findByNameIgnoreCase(email);
+        // 2️⃣ Try ADMIN — first by email, then by name (backward compatible)
+        Optional<AdminUser> admin = adminRepo.findByEmailIgnoreCase(identifier);
+        if (admin.isEmpty()) {
+            admin = adminRepo.findByNameIgnoreCase(identifier);
+        }
+
         if (admin.isPresent()) {
             AdminUser a = admin.get();
 
@@ -64,10 +68,15 @@ public class AuthService {
                 throw new IllegalArgumentException("Invalid credentials");
             }
 
-            String token = jwtService.generateToken(a.getName(), "admin", a.getId());
+            String subject = (a.getEmail() != null && !a.getEmail().isBlank())
+                    ? a.getEmail()
+                    : a.getName();
+
+            String token = jwtService.generateToken(subject, "admin", a.getId());
+
             return new LoginResponse(
                     a.getId(),
-                    null,
+                    a.getEmail(),
                     a.getName(),
                     "admin",
                     token,

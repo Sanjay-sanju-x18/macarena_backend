@@ -34,10 +34,9 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
 
-                // ✅ CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // ✅ Public — anyone can access
+                // Public
                 .requestMatchers(
                         "/api/auth/**",
                         "/api/customers/register",
@@ -47,12 +46,21 @@ public class SecurityConfig {
                         "/api/dress-types/**"
                 ).permitAll()
 
-                // ✅ Admin-only
+                // Customer-only
+                .requestMatchers("/api/cart/**").hasRole("CUSTOMER")
+                .requestMatchers("/api/profile/**").hasRole("CUSTOMER")
+                .requestMatchers("/api/payments/**").hasRole("CUSTOMER")
+                .requestMatchers("/api/likes/**").hasRole("CUSTOMER")   // 👈 ADDED
+
+                // Orders — customers create/view their own; admins view/update
+                .requestMatchers("/api/orders/**").hasAnyRole("CUSTOMER", "ADMIN")
+
+                // Admin-only
                 .requestMatchers("/api/admins/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin-profile/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/customers/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/customers/**").hasRole("ADMIN")
 
-                // ✅ Everything else requires login
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

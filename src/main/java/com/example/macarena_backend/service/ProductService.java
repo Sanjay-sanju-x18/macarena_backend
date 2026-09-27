@@ -70,6 +70,12 @@ public class ProductService {
         return toResponse(repository.save(p));
     }
 
+    
+    public ProductResponse getById(Long id) {
+        Product p = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+        return toResponse(p);
+    }
     @Transactional
     public void remove(Long id) {
         if (!repository.existsById(id)) {

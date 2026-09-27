@@ -28,6 +28,7 @@ public class AdminService {
                 .map(a -> new AdminResponse(
                         a.getId(),
                         a.getName(),
+                        a.getEmail(),
                         a.getCreatedAt(),
                         null))
                 .collect(Collectors.toList());
@@ -41,13 +42,19 @@ public class AdminService {
         }
 
         String name = req.getName().trim();
+        String email = req.getEmail().trim().toLowerCase();
 
         if (repository.existsByNameIgnoreCase(name)) {
             throw new IllegalArgumentException("\"" + name + "\" already exists");
         }
 
+        if (repository.existsByEmailIgnoreCase(email)) {
+            throw new IllegalArgumentException("Email is already registered");
+        }
+
         AdminUser admin = new AdminUser(
                 name,
+                email,
                 passwordEncoder.encode(req.getPassword())
         );
 
@@ -56,6 +63,7 @@ public class AdminService {
         return new AdminResponse(
                 saved.getId(),
                 saved.getName(),
+                saved.getEmail(),
                 saved.getCreatedAt(),
                 "Admin created successfully"
         );
