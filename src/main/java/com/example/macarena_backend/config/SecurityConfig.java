@@ -53,7 +53,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/profile/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/payments/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/likes/**").hasRole("CUSTOMER")   // 👈 ADDED
-
+                .requestMatchers("/api/couriers/**").permitAll()
                 // Orders — customers create/view their own; admins view/update
                 .requestMatchers("/api/orders/**").hasAnyRole("CUSTOMER", "ADMIN")
 
