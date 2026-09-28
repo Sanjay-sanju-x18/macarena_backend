@@ -84,6 +84,44 @@ public class ProductService {
         repository.deleteById(id);
     }
 
+    @Transactional
+    public ProductResponse update(Long id, ProductRequest req, List<MultipartFile> photos) {
+        Product p = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Product not found: " + id));
+
+        DressType dressType = dressTypeRepo.findById(req.getDressTypeId())
+                .orElseThrow(() -> new IllegalArgumentException("Dress type not found"));
+
+        p.setDressName(req.getDressName());
+        p.setDressType(dressType);
+        p.setPrice(req.getPrice());
+        p.setOfferPercentage(req.getOfferPercentage());
+        p.setOfferPrice(req.getOfferPrice());
+        p.setSizeType(req.getSizeType());
+        p.setTotalQty(req.getTotalQty());
+
+        // sizes: existing list-a clear panni pudhusa add pannurom
+        List<ProductSize> newSizes = req.getSizes().stream()
+                .map(s -> new ProductSize(s.getSize(), s.getQty()))
+                .collect(Collectors.toList());
+        p.getSizes().clear();
+        p.getSizes().addAll(newSizes);
+
+        // photos: pudhu photo irundha mattum, pazhaiya photos-oda serthu vaikkum
+        if (photos != null) {
+            List<String> urls = new ArrayList<>(p.getPhotos());
+            for (MultipartFile f : photos) {
+                if (!f.isEmpty()) {
+                    urls.add(fileStorage.store(f));
+                }
+            }
+            p.getPhotos().clear();
+            p.getPhotos().addAll(urls);
+        }
+
+        return toResponse(repository.save(p));
+    }
+    
     private ProductResponse toResponse(Product p) {
         ProductResponse r = new ProductResponse();
         r.setId(p.getId());

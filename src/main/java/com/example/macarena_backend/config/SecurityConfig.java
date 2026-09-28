@@ -33,8 +33,10 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+            	    .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
+            	    .requestMatchers("/error").permitAll()
+            	    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+            	    // ... rest unchanged
 
                 // Public
                 .requestMatchers(

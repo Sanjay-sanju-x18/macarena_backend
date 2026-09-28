@@ -97,6 +97,62 @@ public class ProductController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> update(
+            @PathVariable Long id,
+            @RequestParam String dressName,
+            @RequestParam Long dressTypeId,
+            @RequestParam Double price,
+            @RequestParam(required = false) Double offerPercentage,
+            @RequestParam Double offerPrice,
+            @RequestParam String sizeType,
+            @RequestParam Integer totalQty,
+            @RequestParam("sizeLabels") List<String> sizeLabels,
+            @RequestParam("sizeQty") List<Integer> sizeQty,
+            @RequestParam(value = "photos", required = false) List<MultipartFile> photos) {
+
+        try {
+            if (sizeLabels.size() != sizeQty.size()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "sizeLabels and sizeQty count mismatch"));
+            }
+
+            ProductRequest req = new ProductRequest();
+            req.setDressName(dressName);
+            req.setDressTypeId(dressTypeId);
+            req.setPrice(price);
+            req.setOfferPercentage(offerPercentage);
+            req.setOfferPrice(offerPrice);
+            req.setSizeType(sizeType);
+            req.setTotalQty(totalQty);
+
+            List<ProductRequest.SizeQtyDto> sizes = new ArrayList<>();
+            for (int i = 0; i < sizeLabels.size(); i++) {
+                ProductRequest.SizeQtyDto dto = new ProductRequest.SizeQtyDto();
+                dto.setSize(sizeLabels.get(i));
+                dto.setQty(sizeQty.get(i));
+                sizes.add(dto);
+            }
+            req.setSizes(sizes);
+
+            Set<ConstraintViolation<ProductRequest>> violations = validator.validate(req);
+            if (!violations.isEmpty()) {
+                String msg = violations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining(", "));
+                return ResponseEntity.badRequest().body(Map.of("error", msg));
+            }
+
+            ProductResponse updated = service.update(id, req, photos);
+            return ResponseEntity.ok(updated);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> remove(@PathVariable Long id) {
