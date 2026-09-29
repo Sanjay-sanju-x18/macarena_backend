@@ -33,9 +33,7 @@ public class ProductService {
         this.soldOutService = soldOutService;
     }
 
-    // ============================================================
-    // 👇 STEP 3-A — Only live products (archived filtered out)
-    // ============================================================
+    /** Only live products (archived filtered out). Used by home page. */
     public List<ProductResponse> getAll() {
         return repository.findByArchivedAtIsNullOrderByIdDesc().stream()
                 .map(this::toResponse)
@@ -75,15 +73,15 @@ public class ProductService {
         return toResponse(repository.save(p));
     }
 
-    // ============================================================
-    // 👇 STEP 3-B — Throw if product is archived
-    // ============================================================
+    /**
+     * 👇 Changed — no longer throws for archived products.
+     * Returns the product with `archivedAt` populated so the cart
+     * can show "no longer available" while still showing the name.
+     * The home page filters archived products via getAll().
+     */
     public ProductResponse getById(Long id) {
         Product p = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
-        if (p.getArchivedAt() != null) {
-            throw new IllegalArgumentException("Product no longer available");
-        }
         return toResponse(p);
     }
 
@@ -188,6 +186,7 @@ public class ProductService {
                 .collect(Collectors.toList()));
         r.setPhotoUrls(new ArrayList<>(p.getPhotos()));
 
+        // Sold-out size labels
         try {
             r.setSoldOutSizes(
                 new ArrayList<>(soldOutService.getSoldOutSizes(p.getId()))
@@ -195,6 +194,9 @@ public class ProductService {
         } catch (Exception e) {
             r.setSoldOutSizes(new ArrayList<>());
         }
+
+        // 👇 NEW — expose archivedAt so the cart can detect archived products
+        r.setArchivedAt(p.getArchivedAt());
 
         return r;
     }

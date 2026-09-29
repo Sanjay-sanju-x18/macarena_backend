@@ -1,5 +1,6 @@
 package com.example.macarena_backend.dto;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,8 +21,11 @@ public class ProductResponse {
     private List<SizeQtyDto> sizes;
     private List<String> photoUrls;
 
-    /** 👇 NEW — size labels that are currently flagged sold-out */
+    /** Size labels that are currently flagged sold-out */
     private List<String> soldOutSizes = new ArrayList<>();
+
+    /** 👇 NEW — non-null when the product has been archived (no longer for sale) */
+    private LocalDateTime archivedAt;
 
     public ProductResponse() {}
 
@@ -58,11 +62,14 @@ public class ProductResponse {
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls; }
 
-    // 👇 NEW getter/setter
     public List<String> getSoldOutSizes() { return soldOutSizes; }
     public void setSoldOutSizes(List<String> soldOutSizes) {
         this.soldOutSizes = soldOutSizes == null ? new ArrayList<>() : soldOutSizes;
     }
+
+    // 👇 NEW getter/setter for archivedAt
+    public LocalDateTime getArchivedAt() { return archivedAt; }
+    public void setArchivedAt(LocalDateTime archivedAt) { this.archivedAt = archivedAt; }
 
     public static class SizeQtyDto {
         private String size;
