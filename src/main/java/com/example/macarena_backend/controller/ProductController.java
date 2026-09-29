@@ -34,7 +34,7 @@ public class ProductController {
     public List<ProductResponse> getAll() {
         return service.getAll();
     }
-    
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
@@ -48,7 +48,7 @@ public class ProductController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> add(
             @RequestParam String dressName,
-            @RequestParam Long dressTypeId,                    // ✅
+            @RequestParam Long dressTypeId,
             @RequestParam Double price,
             @RequestParam(required = false) Double offerPercentage,
             @RequestParam Double offerPrice,
@@ -61,7 +61,7 @@ public class ProductController {
         try {
             ProductRequest req = new ProductRequest();
             req.setDressName(dressName);
-            req.setDressTypeId(dressTypeId);                  // ✅
+            req.setDressTypeId(dressTypeId);
             req.setPrice(price);
             req.setOfferPercentage(offerPercentage);
             req.setOfferPrice(offerPrice);
@@ -97,6 +97,7 @@ public class ProductController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
             @PathVariable Long id,
@@ -109,6 +110,7 @@ public class ProductController {
             @RequestParam Integer totalQty,
             @RequestParam("sizeLabels") List<String> sizeLabels,
             @RequestParam("sizeQty") List<Integer> sizeQty,
+            @RequestParam(value = "removedPhotos", required = false) List<String> removedPhotos,
             @RequestParam(value = "photos", required = false) List<MultipartFile> photos) {
 
         try {
@@ -143,7 +145,7 @@ public class ProductController {
                 return ResponseEntity.badRequest().body(Map.of("error", msg));
             }
 
-            ProductResponse updated = service.update(id, req, photos);
+            ProductResponse updated = service.update(id, req, photos, removedPhotos);
             return ResponseEntity.ok(updated);
 
         } catch (IllegalArgumentException e) {

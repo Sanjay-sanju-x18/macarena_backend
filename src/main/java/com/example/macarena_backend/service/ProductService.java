@@ -39,13 +39,12 @@ public class ProductService {
     @Transactional
     public ProductResponse create(ProductRequest req, List<MultipartFile> photos) {
 
-        // ✅ Look up the DressType by ID from the existing table
         DressType dressType = dressTypeRepo.findById(req.getDressTypeId())
                 .orElseThrow(() -> new IllegalArgumentException("Dress type not found"));
 
         Product p = new Product();
         p.setDressName(req.getDressName());
-        p.setDressType(dressType);                 // ✅ set FK
+        p.setDressType(dressType);
         p.setPrice(req.getPrice());
         p.setOfferPercentage(req.getOfferPercentage());
         p.setOfferPrice(req.getOfferPrice());
@@ -70,12 +69,12 @@ public class ProductService {
         return toResponse(repository.save(p));
     }
 
-    
     public ProductResponse getById(Long id) {
         Product p = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
         return toResponse(p);
     }
+
     @Transactional
     public void remove(Long id) {
         if (!repository.existsById(id)) {
@@ -85,7 +84,10 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductResponse update(Long id, ProductRequest req, List<MultipartFile> photos) {
+    public ProductResponse update(Long id, ProductRequest req,
+                                  List<MultipartFile> photos,
+                                  List<String> removedPhotos) {
+
         Product p = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + id));
 
@@ -107,27 +109,64 @@ public class ProductService {
         p.getSizes().clear();
         p.getSizes().addAll(newSizes);
 
-        // photos: pudhu photo irundha mattum, pazhaiya photos-oda serthu vaikkum
+        // ---------- photos ----------
+        List<String> urls = new ArrayList<>(p.getPhotos());
+        List<String> toDeleteFromDisk = new ArrayList<>();
+
+        System.out.println("[update] DB photos     : " + urls);
+        System.out.println("[update] removedPhotos : " + removedPhotos);
+
+        // 1) remove selected photos (filename vachu match -> path format prachanai illa)
+        if (removedPhotos != null) {
+            for (String removed : removedPhotos) {
+                String removedName = fileName(removed);
+                String match = urls.stream()
+                        .filter(u -> fileName(u).equals(removedName))
+                        .findFirst()
+                        .orElse(null);
+                if (match != null) {
+                    urls.remove(match);
+                    toDeleteFromDisk.add(match);
+                }
+            }
+        }
+
+        // 2) add new photos
         if (photos != null) {
-            List<String> urls = new ArrayList<>(p.getPhotos());
             for (MultipartFile f : photos) {
                 if (!f.isEmpty()) {
                     urls.add(fileStorage.store(f));
                 }
             }
-            p.getPhotos().clear();
-            p.getPhotos().addAll(urls);
         }
 
-        return toResponse(repository.save(p));
+        // 3) at least one photo venum
+        if (urls.isEmpty()) {
+            throw new IllegalStateException("At least one photo is required");
+        }
+
+        p.getPhotos().clear();
+        p.getPhotos().addAll(urls);
+
+        Product saved = repository.save(p);
+
+        // DB save success aana piragu mattum disk-la irundhu delete
+        toDeleteFromDisk.forEach(fileStorage::delete);
+
+        return toResponse(saved);
     }
-    
+
+    private String fileName(String path) {
+        if (path == null) return "";
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
     private ProductResponse toResponse(Product p) {
         ProductResponse r = new ProductResponse();
         r.setId(p.getId());
         r.setDressName(p.getDressName());
-        r.setDressTypeId(p.getDressType().getId());        // ✅
-        r.setDressTypeName(p.getDressType().getName());    // ✅
+        r.setDressTypeId(p.getDressType().getId());
+        r.setDressTypeName(p.getDressType().getName());
         r.setPrice(p.getPrice());
         r.setOfferPercentage(p.getOfferPercentage());
         r.setOfferPrice(p.getOfferPrice());
@@ -136,7 +175,7 @@ public class ProductService {
         r.setSizes(p.getSizes().stream()
                 .map(s -> new ProductResponse.SizeQtyDto(s.getSize(), s.getQty()))
                 .collect(Collectors.toList()));
-        r.setPhotoUrls(p.getPhotos());
+        r.setPhotoUrls(new ArrayList<>(p.getPhotos()));
         return r;
     }
 }

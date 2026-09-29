@@ -32,6 +32,21 @@ public class FileStorageService {
         }
     }
 
+    public void delete(String url) {
+        try {
+            // url = "/uploads/products/abc.jpg" -> filename = "abc.jpg"
+            String filename = url.substring(url.lastIndexOf('/') + 1);
+            Path base = rootDir.toAbsolutePath().normalize();
+            Path file = base.resolve(filename).normalize();
+            if (file.startsWith(base)) {               // path traversal safety
+                Files.deleteIfExists(file);
+            }
+        } catch (IOException e) {
+            // file delete fail aanaalum request fail aagaadhu
+            e.printStackTrace();
+        }
+    }
+
     private String getExtension(String name) {
         if (name == null || !name.contains(".")) return "";
         return name.substring(name.lastIndexOf("."));
