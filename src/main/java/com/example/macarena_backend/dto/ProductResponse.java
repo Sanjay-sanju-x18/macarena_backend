@@ -1,5 +1,6 @@
 package com.example.macarena_backend.dto;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ProductResponse {
@@ -18,6 +19,9 @@ public class ProductResponse {
     private Integer totalQty;
     private List<SizeQtyDto> sizes;
     private List<String> photoUrls;
+
+    /** 👇 NEW — size labels that are currently flagged sold-out */
+    private List<String> soldOutSizes = new ArrayList<>();
 
     public ProductResponse() {}
 
@@ -53,6 +57,12 @@ public class ProductResponse {
 
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls; }
+
+    // 👇 NEW getter/setter
+    public List<String> getSoldOutSizes() { return soldOutSizes; }
+    public void setSoldOutSizes(List<String> soldOutSizes) {
+        this.soldOutSizes = soldOutSizes == null ? new ArrayList<>() : soldOutSizes;
+    }
 
     public static class SizeQtyDto {
         private String size;

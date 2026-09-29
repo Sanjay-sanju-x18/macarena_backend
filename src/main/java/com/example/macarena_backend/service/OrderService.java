@@ -17,13 +17,16 @@ public class OrderService {
     private final OrderRepository orderRepo;
     private final CartItemRepository cartRepo;
     private final ProductRepository productRepo;
+    private final SoldOutProductService soldOutService;   // 👈 NEW
 
     public OrderService(OrderRepository orderRepo,
                         CartItemRepository cartRepo,
-                        ProductRepository productRepo) {
+                        ProductRepository productRepo,
+                        SoldOutProductService soldOutService) {   // 👈 NEW
         this.orderRepo = orderRepo;
         this.cartRepo = cartRepo;
         this.productRepo = productRepo;
+        this.soldOutService = soldOutService;
     }
 
     // ---------- READ ----------
@@ -73,6 +76,9 @@ public class OrderService {
             Product p = productRepo.findById(ci.getProductId()).orElse(null);
             if (p == null) continue;
 
+            // 👇 REDUCE STOCK — throws if not enough (rolls back the whole transaction)
+            reduceStock(p, ci.getSize(), ci.getQuantity());
+
             double unitPrice = (p.getOfferPrice() != null && p.getOfferPrice() > 0)
                     ? p.getOfferPrice()
                     : p.getPrice();
@@ -112,6 +118,11 @@ public class OrderService {
         Product p = productRepo.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
 
+        String effectiveSize = (size == null || size.isBlank()) ? "One Size" : size;
+
+        // 👇 REDUCE STOCK — throws if not enough
+        reduceStock(p, effectiveSize, quantity);
+
         double unitPrice = (p.getOfferPrice() != null && p.getOfferPrice() > 0)
                 ? p.getOfferPrice()
                 : p.getPrice();
@@ -133,7 +144,7 @@ public class OrderService {
         oi.setProductId(p.getId());
         oi.setProductName(p.getDressName());
         oi.setProductImage(p.getPhotos().isEmpty() ? null : p.getPhotos().get(0));
-        oi.setSize(size == null || size.isBlank() ? "One Size" : size);
+        oi.setSize(effectiveSize);
         oi.setQuantity(quantity);
         oi.setUnitPrice(unitPrice);
         oi.setLineTotal(unitPrice * quantity);
@@ -152,6 +163,71 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
         o.setStatus(status.toUpperCase());
         return toDto(orderRepo.save(o));
+    }
+
+    // ============================================================
+    // STOCK REDUCTION
+    // ============================================================
+    /**
+     * Reduces stock for a specific product+size by `qty`.
+     * Throws IllegalArgumentException if not enough stock —
+     * this rolls back the entire order transaction (order won't be saved).
+     *
+     * ⚠️ Uses ProductSize.getQty() / setQty() — matches your entity.
+     *
+     * 👇 NEW: if the size just hit 0, also flags it as sold out.
+     */
+    private void reduceStock(Product product, String size, int qty) {
+        if (qty <= 0) return;
+
+        // Find the matching ProductSize entry
+        ProductSize target = null;
+        if (product.getSizes() != null) {
+            for (ProductSize ps : product.getSizes()) {
+                if (ps.getSize() != null && ps.getSize().equalsIgnoreCase(size)) {
+                    target = ps;
+                    break;
+                }
+            }
+        }
+
+        // Guard: size must exist
+        if (target == null) {
+            throw new IllegalArgumentException(
+                "Size '" + size + "' is not available for "
+                + product.getDressName() + " (product id " + product.getId() + ")");
+        }
+
+        // Guard: enough stock at that size
+        int available = target.getQty() == null ? 0 : target.getQty();
+        if (available < qty) {
+            throw new IllegalArgumentException(
+                "Insufficient stock for " + product.getDressName()
+                + " (size " + size + "). Available: " + available
+                + ", requested: " + qty);
+        }
+
+        // Decrement size stock
+        int remaining = available - qty;
+        target.setQty(remaining);
+
+        // Decrement product's total_qty (floor at 0)
+        Integer total = product.getTotalQty();
+        if (total != null) {
+            product.setTotalQty(Math.max(0, total - qty));
+        }
+
+        // Persist — Hibernate flushes both Product and ProductSize
+        productRepo.save(product);
+
+        // 👇 If this size just hit 0, flag it as sold out (24h record)
+        if (remaining == 0) {
+            soldOutService.markSoldOut(
+                product.getId(),
+                size,
+                product.getDressName()
+            );
+        }
     }
 
     // ---------- MAPPER ----------

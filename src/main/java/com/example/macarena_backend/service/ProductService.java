@@ -21,17 +21,23 @@ public class ProductService {
     private final ProductRepository repository;
     private final DressTypeRepository dressTypeRepo;
     private final FileStorageService fileStorage;
+    private final SoldOutProductService soldOutService;
 
     public ProductService(ProductRepository repository,
                           DressTypeRepository dressTypeRepo,
-                          FileStorageService fileStorage) {
+                          FileStorageService fileStorage,
+                          SoldOutProductService soldOutService) {
         this.repository = repository;
         this.dressTypeRepo = dressTypeRepo;
         this.fileStorage = fileStorage;
+        this.soldOutService = soldOutService;
     }
 
+    // ============================================================
+    // 👇 STEP 3-A — Only live products (archived filtered out)
+    // ============================================================
     public List<ProductResponse> getAll() {
-        return repository.findAllByOrderByIdDesc().stream()
+        return repository.findByArchivedAtIsNullOrderByIdDesc().stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -69,9 +75,15 @@ public class ProductService {
         return toResponse(repository.save(p));
     }
 
+    // ============================================================
+    // 👇 STEP 3-B — Throw if product is archived
+    // ============================================================
     public ProductResponse getById(Long id) {
         Product p = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+        if (p.getArchivedAt() != null) {
+            throw new IllegalArgumentException("Product no longer available");
+        }
         return toResponse(p);
     }
 
@@ -116,7 +128,7 @@ public class ProductService {
         System.out.println("[update] DB photos     : " + urls);
         System.out.println("[update] removedPhotos : " + removedPhotos);
 
-        // 1) remove selected photos (filename vachu match -> path format prachanai illa)
+        // 1) remove selected photos
         if (removedPhotos != null) {
             for (String removed : removedPhotos) {
                 String removedName = fileName(removed);
@@ -140,7 +152,7 @@ public class ProductService {
             }
         }
 
-        // 3) at least one photo venum
+        // 3) at least one photo
         if (urls.isEmpty()) {
             throw new IllegalStateException("At least one photo is required");
         }
@@ -150,7 +162,6 @@ public class ProductService {
 
         Product saved = repository.save(p);
 
-        // DB save success aana piragu mattum disk-la irundhu delete
         toDeleteFromDisk.forEach(fileStorage::delete);
 
         return toResponse(saved);
@@ -176,6 +187,15 @@ public class ProductService {
                 .map(s -> new ProductResponse.SizeQtyDto(s.getSize(), s.getQty()))
                 .collect(Collectors.toList()));
         r.setPhotoUrls(new ArrayList<>(p.getPhotos()));
+
+        try {
+            r.setSoldOutSizes(
+                new ArrayList<>(soldOutService.getSoldOutSizes(p.getId()))
+            );
+        } catch (Exception e) {
+            r.setSoldOutSizes(new ArrayList<>());
+        }
+
         return r;
     }
 }

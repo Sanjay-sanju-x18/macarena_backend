@@ -3,6 +3,7 @@ package com.example.macarena_backend.entity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,7 +19,6 @@ public class Product {
     @Column(nullable = false)
     private String dressName;
 
-    // ✅ FK to dress_types table
     @NotNull(message = "Product type is required")
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "dress_type_id", nullable = false)
@@ -56,6 +56,13 @@ public class Product {
     @Column(name = "photo_path")
     private List<String> photos = new ArrayList<>();
 
+    // 👇 Archival fields
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
+
+    @Column(name = "archived_reason", length = 50)
+    private String archivedReason;
+
     public Product() {}
 
     public Long getId() { return id; }
@@ -87,4 +94,10 @@ public class Product {
 
     public List<String> getPhotos() { return photos; }
     public void setPhotos(List<String> photos) { this.photos = photos; }
+
+    public LocalDateTime getArchivedAt() { return archivedAt; }
+    public void setArchivedAt(LocalDateTime archivedAt) { this.archivedAt = archivedAt; }
+
+    public String getArchivedReason() { return archivedReason; }
+    public void setArchivedReason(String archivedReason) { this.archivedReason = archivedReason; }
 }
