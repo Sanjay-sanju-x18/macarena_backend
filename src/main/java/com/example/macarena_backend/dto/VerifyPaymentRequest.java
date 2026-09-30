@@ -4,14 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 
 public class VerifyPaymentRequest {
 
+    /** 👇 Cashfree order ID — replaces the 3 Razorpay fields */
     @NotBlank
-    private String razorpayOrderId;
-
-    @NotBlank
-    private String razorpayPaymentId;
-
-    @NotBlank
-    private String razorpaySignature;
+    private String cashfreeOrderId;
 
     @NotBlank
     private String fullName;
@@ -36,14 +31,10 @@ public class VerifyPaymentRequest {
     private String size;
     private Integer quantity;
 
-    public String getRazorpayOrderId() { return razorpayOrderId; }
-    public void setRazorpayOrderId(String razorpayOrderId) { this.razorpayOrderId = razorpayOrderId; }
+    // ---- getters/setters ----
 
-    public String getRazorpayPaymentId() { return razorpayPaymentId; }
-    public void setRazorpayPaymentId(String razorpayPaymentId) { this.razorpayPaymentId = razorpayPaymentId; }
-
-    public String getRazorpaySignature() { return razorpaySignature; }
-    public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
+    public String getCashfreeOrderId() { return cashfreeOrderId; }
+    public void setCashfreeOrderId(String cashfreeOrderId) { this.cashfreeOrderId = cashfreeOrderId; }
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }

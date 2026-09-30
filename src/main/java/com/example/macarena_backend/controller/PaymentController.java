@@ -1,41 +1,35 @@
 package com.example.macarena_backend.controller;
 
-import com.example.macarena_backend.config.PaymentProperties;
-import com.example.macarena_backend.config.RazorpayConfig;
+import com.cashfree.pg.ApiResponse;
+import com.cashfree.pg.Cashfree;
+import com.cashfree.pg.model.CreateOrderRequest;
+import com.cashfree.pg.model.CustomerDetails;
+import com.cashfree.pg.model.OrderEntity;
 import com.example.macarena_backend.dto.CreatePaymentRequest;
 import com.example.macarena_backend.dto.OrderRequest;
 import com.example.macarena_backend.dto.OrderResponse;
 import com.example.macarena_backend.dto.VerifyPaymentRequest;
 import com.example.macarena_backend.service.OrderService;
-import com.razorpay.Order;
-import com.razorpay.RazorpayClient;
-import com.razorpay.Utils;
 import jakarta.validation.Valid;
-import org.json.JSONObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/payments")
 @CrossOrigin(origins = "http://localhost:4200")
 public class PaymentController {
 
-    private final RazorpayClient razorpayClient;
-    private final RazorpayConfig razorpayConfig;
+    private final Cashfree cashfree;
     private final OrderService orderService;
-    private final PaymentProperties paymentProperties;
 
-    public PaymentController(RazorpayClient razorpayClient,
-                             RazorpayConfig razorpayConfig,
-                             OrderService orderService,
-                             PaymentProperties paymentProperties) {
-        this.razorpayClient = razorpayClient;
-        this.razorpayConfig = razorpayConfig;
+    public PaymentController(Cashfree cashfree, OrderService orderService) {
+        this.cashfree = cashfree;
         this.orderService = orderService;
-        this.paymentProperties = paymentProperties;
     }
 
     // ---------- Helper ----------
@@ -47,28 +41,61 @@ public class PaymentController {
     }
 
     // ============================================================
-    // Step 1 — Create Razorpay order
+    // STEP 1 — Create Cashfree order
+    // POST /api/payments/cashfree/create-order
     // ============================================================
-    @PostMapping("/create-order")
-    public ResponseEntity<?> createOrder(@Valid @RequestBody CreatePaymentRequest req) {
+    @PostMapping("/cashfree/create-order")
+    public ResponseEntity<?> createCashfreeOrder(
+            @Valid @RequestBody CreatePaymentRequest req,
+            Authentication auth) {
         try {
-            // Razorpay expects amount in paise (multiply rupees by 100)
-            int amountInPaise = (int) Math.round(req.getAmount() * 100);
+            Long customerId = currentCustomerId(auth);
 
-            JSONObject orderReq = new JSONObject();
-            orderReq.put("amount", amountInPaise);
-            orderReq.put("currency", "INR");
-            orderReq.put("receipt", "rcpt_" + System.currentTimeMillis());
-            orderReq.put("payment_capture", 1);
+            // Customer details
+            CustomerDetails customer = new CustomerDetails();
+            customer.setCustomerId(String.valueOf(customerId));
+            customer.setCustomerPhone(
+                    req.getPhoneNumber() != null ? req.getPhoneNumber() : "9999999999");
+            if (req.getEmail() != null) {
+                customer.setCustomerEmail(req.getEmail());
+            }
 
-            Order razorpayOrder = razorpayClient.orders.create(orderReq);
+            // Build Cashfree order
+            CreateOrderRequest orderReq = new CreateOrderRequest();
+            orderReq.setOrderAmount(BigDecimal.valueOf(req.getAmount()));
+            orderReq.setOrderCurrency("INR");
+            orderReq.setCustomerDetails(customer);
+            String merchantOrderId = "MAC-" + System.currentTimeMillis()
+                    + "-" + UUID.randomUUID().toString().substring(0, 6);
+            orderReq.setOrderId(merchantOrderId);
+
+            System.out.println(">>> [create-order] Sending to Cashfree:");
+            System.out.println("    merchantOrderId = " + merchantOrderId);
+            System.out.println("    amount          = " + req.getAmount());
+
+            // Call Cashfree
+            ApiResponse<OrderEntity> response =
+                    cashfree.PGCreateOrder(orderReq, null, null, null);
+
+            OrderEntity data = response.getData();
+
+            System.out.println(">>> [create-order] Cashfree response:");
+            System.out.println("    orderId     = " + data.getOrderId());
+            System.out.println("    cfOrderId   = " + data.getCfOrderId());
+            System.out.println("    orderStatus = " + data.getOrderStatus());
+            System.out.println("    sessionId   = " + data.getPaymentSessionId());
+
+            String returnedOrderId = data.getOrderId() != null
+                    ? data.getOrderId()
+                    : merchantOrderId;
+
+            System.out.println(">>> [create-order] Returning orderId = " + returnedOrderId);
 
             return ResponseEntity.ok(Map.of(
-                    "key", razorpayConfig.getKeyId(),
-                    "razorpayOrderId", razorpayOrder.get("id"),
-                    "amount", amountInPaise,
-                    "currency", "INR"
+                    "paymentSessionId", data.getPaymentSessionId(),
+                    "orderId", returnedOrderId
             ));
+
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest()
@@ -77,28 +104,38 @@ public class PaymentController {
     }
 
     // ============================================================
-    // Step 2 — Verify Razorpay signature + place order
+    // STEP 2 — Verify Cashfree payment + place order
+    // POST /api/payments/cashfree/verify
     // ============================================================
-    @PostMapping("/verify")
-    public ResponseEntity<?> verify(@Valid @RequestBody VerifyPaymentRequest req,
-                                    Authentication auth) {
+    @PostMapping("/cashfree/verify")
+    public ResponseEntity<?> verifyCashfreePayment(
+            @Valid @RequestBody VerifyPaymentRequest req,
+            Authentication auth) {
         try {
-            // 1. Verify signature
-            JSONObject options = new JSONObject();
-            options.put("razorpay_order_id", req.getRazorpayOrderId());
-            options.put("razorpay_payment_id", req.getRazorpayPaymentId());
-            options.put("razorpay_signature", req.getRazorpaySignature());
-
-            boolean valid = Utils.verifyPaymentSignature(options, razorpayConfig.getKeySecret());
-
-            if (!valid) {
-                return ResponseEntity.status(400)
-                        .body(Map.of("error", "Payment signature verification failed"));
-            }
-
-            // 2. Signature valid → place the real order
             Long customerId = currentCustomerId(auth);
 
+            System.out.println(">>> [verify] Received orderId from frontend = "
+                    + req.getCashfreeOrderId());
+
+            // Fetch order from Cashfree
+            ApiResponse<OrderEntity> response =
+                    cashfree.PGFetchOrder(req.getCashfreeOrderId(), null, null, null);
+
+            OrderEntity order = response.getData();
+            String status = order.getOrderStatus();
+
+            System.out.println(">>> [verify] Cashfree response:");
+            System.out.println("    orderId   = " + order.getOrderId());
+            System.out.println("    cfOrderId = " + order.getCfOrderId());
+            System.out.println("    status    = " + status);
+
+            if (!"PAID".equalsIgnoreCase(status)) {
+                return ResponseEntity.status(400)
+                        .body(Map.of("error",
+                                "Payment not completed. Cashfree status: " + status));
+            }
+
+            // Build OrderRequest for our DB
             OrderRequest orderReq = new OrderRequest();
             orderReq.setFullName(req.getFullName());
             orderReq.setPhoneNumber(req.getPhoneNumber());
@@ -106,11 +143,11 @@ public class PaymentController {
             orderReq.setCity(req.getCity());
             orderReq.setState(req.getState());
             orderReq.setPincode(req.getPincode());
-            orderReq.setPaymentReference(req.getRazorpayPaymentId());
+            orderReq.setPaymentReference(req.getCashfreeOrderId());
 
-            OrderResponse order;
+            OrderResponse placed;
             if ("buy-now".equalsIgnoreCase(req.getMode())) {
-                order = orderService.placeSingleItemOrder(
+                placed = orderService.placeSingleItemOrder(
                         customerId,
                         orderReq,
                         req.getProductId(),
@@ -118,13 +155,11 @@ public class PaymentController {
                         req.getQuantity() != null ? req.getQuantity() : 1
                 );
             } else {
-                order = orderService.placeOrderFromCart(customerId, orderReq);
+                placed = orderService.placeOrderFromCart(customerId, orderReq);
             }
 
-            // Mark as PAID
-            orderService.updateStatus(order.getId(), "PAID");
-
-            return ResponseEntity.ok(order);
+            orderService.updateStatus(placed.getId(), "PAID");
+            return ResponseEntity.ok(placed);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -134,18 +169,13 @@ public class PaymentController {
     }
 
     // ============================================================
-    // Trial — save order without payment
-    // (only works when payment.required=false)
+    // TRIAL — save order without payment (dev only)
+    // POST /api/payments/trial-place-order
     // ============================================================
     @PostMapping("/trial-place-order")
-    public ResponseEntity<?> trialPlaceOrder(@Valid @RequestBody VerifyPaymentRequest req,
-                                             Authentication auth) {
-        // 🛡️ Safety: this endpoint is dead once real payments are enabled
-        if (paymentProperties.isPaymentRequired()) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("error", "Trial mode is disabled. Please complete payment."));
-        }
-
+    public ResponseEntity<?> trialPlaceOrder(
+            @Valid @RequestBody VerifyPaymentRequest req,
+            Authentication auth) {
         try {
             Long customerId = currentCustomerId(auth);
 
@@ -158,9 +188,9 @@ public class PaymentController {
             orderReq.setPincode(req.getPincode());
             orderReq.setPaymentReference("TRIAL-NO-PAYMENT");
 
-            OrderResponse order;
+            OrderResponse placed;
             if ("buy-now".equalsIgnoreCase(req.getMode())) {
-                order = orderService.placeSingleItemOrder(
+                placed = orderService.placeSingleItemOrder(
                         customerId,
                         orderReq,
                         req.getProductId(),
@@ -168,13 +198,11 @@ public class PaymentController {
                         req.getQuantity() != null ? req.getQuantity() : 1
                 );
             } else {
-                order = orderService.placeOrderFromCart(customerId, orderReq);
+                placed = orderService.placeOrderFromCart(customerId, orderReq);
             }
 
-            // Mark status as TRIAL
-            orderService.updateStatus(order.getId(), "TRIAL");
-
-            return ResponseEntity.ok(order);
+            orderService.updateStatus(placed.getId(), "TRIAL");
+            return ResponseEntity.ok(placed);
 
         } catch (Exception e) {
             e.printStackTrace();

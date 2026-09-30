@@ -7,8 +7,20 @@ public class CreatePaymentRequest {
 
     @NotNull(message = "Amount is required")
     @Positive(message = "Amount must be positive")
-    private Double amount;     // in rupees, e.g. 500.00
+    private Double amount;      // in rupees, e.g. 500.00
+
+    /** 👇 Optional — used to prefill Cashfree checkout */
+    private String phoneNumber;
+
+    /** 👇 Optional — used to prefill Cashfree checkout */
+    private String email;
 
     public Double getAmount() { return amount; }
     public void setAmount(Double amount) { this.amount = amount; }
+
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 }
