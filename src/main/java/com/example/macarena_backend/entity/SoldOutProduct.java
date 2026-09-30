@@ -23,6 +23,7 @@ public class SoldOutProduct {
     @Column(name = "sold_out_at", nullable = false)
     private LocalDateTime soldOutAt = LocalDateTime.now();
 
+    /** null = admin activate pannara varaikkum inactive-a irukkum */
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
@@ -36,7 +37,7 @@ public class SoldOutProduct {
         this.sizeLabel = sizeLabel;
         this.productName = productName;
         this.soldOutAt = LocalDateTime.now();
-        this.expiresAt = this.soldOutAt.plusHours(24);
+        this.expiresAt = null; // manual activation only
     }
 
     public Long getId() { return id; }

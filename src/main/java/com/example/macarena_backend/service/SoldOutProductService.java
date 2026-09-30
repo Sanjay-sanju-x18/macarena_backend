@@ -3,8 +3,10 @@ package com.example.macarena_backend.service;
 import com.example.macarena_backend.dto.SoldOutProductResponse;
 import com.example.macarena_backend.entity.SoldOutProduct;
 import com.example.macarena_backend.repository.SoldOutProductRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,58 +22,83 @@ public class SoldOutProductService {
         this.repo = repo;
     }
 
-    /** Called by OrderService when a size hits 0. */
+    /** OrderService stock 0 aana apo call pannum -> product INACTIVE aagum. */
     @Transactional
     public void markSoldOut(Long productId, String sizeLabel, String productName) {
-        // Don't create duplicates while an active flag exists
         List<SoldOutProduct> existing =
-            repo.findByProductIdAndSizeLabelAndExpiresAtAfter(
-                productId, sizeLabel, LocalDateTime.now());
-        if (!existing.isEmpty()) return;
+                repo.findActiveByProductIdAndSize(productId, sizeLabel, LocalDateTime.now());
+        if (!existing.isEmpty()) return; // already inactive
 
         repo.save(new SoldOutProduct(productId, sizeLabel, productName));
     }
 
-    /** All active sold-out records for a single product. */
+    /** Oru product-oda inactive records. */
     public List<SoldOutProduct> getActiveForProduct(Long productId) {
-        return repo.findByProductIdAndExpiresAtAfter(productId, LocalDateTime.now());
+        return repo.findActiveByProductId(productId, LocalDateTime.now());
     }
 
-    /** Set of size labels that are currently sold out for a product. */
+    /** Oru product-la sold-out aana size labels (cart/product page-ku). */
     public Set<String> getSoldOutSizes(Long productId) {
-        return repo.findByProductIdAndExpiresAtAfter(productId, LocalDateTime.now())
-                   .stream()
-                   .map(SoldOutProduct::getSizeLabel)
-                   .collect(Collectors.toSet());
+        return repo.findActiveByProductId(productId, LocalDateTime.now())
+                .stream()
+                .map(SoldOutProduct::getSizeLabel)
+                .collect(Collectors.toSet());
     }
 
-    /** All active sold-out records (for admin view). */
+    /** Product ellaa sizes-um sold out-a nu check. */
+    public boolean isProductInactive(Long productId) {
+        return !repo.findActiveByProductId(productId, LocalDateTime.now()).isEmpty();
+    }
+
+    /** Admin list: ella inactive products. */
     public List<SoldOutProductResponse> getAllActive() {
-        return repo.findByExpiresAtAfter(LocalDateTime.now())
-                   .stream()
-                   .map(this::toDto)
-                   .collect(Collectors.toList());
+        return repo.findAllActive(LocalDateTime.now())
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
     }
 
-    /** Manual removal (e.g. admin restocked). */
+    /** ACTIVATE: oru size mattum. */
     @Transactional
     public void clear(Long productId, String sizeLabel) {
-        List<SoldOutProduct> toRemove = repo.findByProductId(productId);
-        toRemove.stream()
-                .filter(s -> s.getSizeLabel() == null
-                        || s.getSizeLabel().equalsIgnoreCase(sizeLabel))
-                .forEach(repo::delete);
+        List<SoldOutProduct> toRemove =
+                repo.findActiveByProductIdAndSize(productId, sizeLabel, LocalDateTime.now());
+        if (toRemove.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No sold-out record for this product/size");
+        }
+        repo.deleteAll(toRemove);
     }
 
-    /** Cleanup job — called by a scheduler. */
+    /** ACTIVATE: product-oda ella sizes-um. */
+    @Transactional
+    public void activateAll(Long productId) {
+        List<SoldOutProduct> toRemove = repo.findByProductId(productId);
+        if (toRemove.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Product is already active");
+        }
+        repo.deleteAll(toRemove);
+    }
+
+    /** ACTIVATE: record id vachu. */
+    @Transactional
+    public void activateById(Long id) {
+        if (!repo.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Record not found");
+        }
+        repo.deleteById(id);
+    }
+
+    /** Scheduler: expired records-a delete pannum. */
     @Transactional
     public void purgeExpired() {
-        repo.deleteByExpiresAtBefore(LocalDateTime.now());
+        repo.deleteExpired(LocalDateTime.now());
     }
 
     private SoldOutProductResponse toDto(SoldOutProduct s) {
         return new SoldOutProductResponse(
-            s.getId(), s.getProductId(), s.getProductName(),
-            s.getSizeLabel(), s.getSoldOutAt(), s.getExpiresAt());
+                s.getId(), s.getProductId(), s.getProductName(),
+                s.getSizeLabel(), s.getSoldOutAt(), s.getExpiresAt());
     }
 }

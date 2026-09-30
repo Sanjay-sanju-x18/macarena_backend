@@ -19,25 +19,37 @@ public class SoldOutProductController {
         this.service = service;
     }
 
-    /** Public — anyone can read which products/sizes are sold out. */
+    /** Admin: ella inactive (sold-out) products. */
     @GetMapping
     public ResponseEntity<List<SoldOutProductResponse>> listAll() {
         return ResponseEntity.ok(service.getAllActive());
     }
 
-    /** Public — sold-out sizes for one product. */
+    /** Public: oru product-oda sold-out sizes. */
     @GetMapping("/product/{productId}")
     public ResponseEntity<List<String>> forProduct(@PathVariable Long productId) {
-        return ResponseEntity.ok(
-            service.getSoldOutSizes(productId).stream().toList());
+        return ResponseEntity.ok(service.getSoldOutSizes(productId).stream().toList());
     }
 
-    /** Admin — clear a sold-out flag (e.g. after restock). */
+    /** Admin: oru size-a activate pannu. */
     @DeleteMapping("/clear")
-    public ResponseEntity<Map<String, String>> clear(
-            @RequestParam Long productId,
-            @RequestParam String sizeLabel) {
+    public ResponseEntity<Map<String, String>> clear(@RequestParam Long productId,
+                                                     @RequestParam String sizeLabel) {
         service.clear(productId, sizeLabel);
-        return ResponseEntity.ok(Map.of("message", "Cleared"));
+        return ResponseEntity.ok(Map.of("message", "Activated"));
+    }
+
+    /** Admin: product-oda ella sizes-um activate pannu. */
+    @DeleteMapping("/activate/{productId}")
+    public ResponseEntity<Map<String, String>> activateProduct(@PathVariable Long productId) {
+        service.activateAll(productId);
+        return ResponseEntity.ok(Map.of("message", "Product activated"));
+    }
+
+    /** Admin: record id vachu activate pannu. */
+    @DeleteMapping("/record/{id}")
+    public ResponseEntity<Map<String, String>> activateById(@PathVariable Long id) {
+        service.activateById(id);
+        return ResponseEntity.ok(Map.of("message", "Activated"));
     }
 }
